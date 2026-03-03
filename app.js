@@ -64,6 +64,11 @@ function isTokenValid(token) {
 }
 
 var app = function(req, res) {
+  if (req.url === '/camera') {
+    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.end(fs.readFileSync(path.join(__dirname, 'webcam.html')));
+    return;
+  }
   // Handle /auth endpoint - returns a temporary token
   if (req.url === '/auth') {
     const token = generateAuthToken();

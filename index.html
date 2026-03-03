@@ -255,6 +255,7 @@
 		// Connect to WebSocket server
 		let ws = null;
 		const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+		let intentionalDisconnect = false;
 		
 		function connectWebSocket(token) {
 			let wsUrl = protocol + '//' + location.host;
@@ -300,6 +301,16 @@
 				addMessage('Disconnected from WebSocket server', 'error');
 				connectionStatus.style.backgroundColor = '#ffcccb';
 				connectionStatus.innerHTML = '<strong style="color: #d32f2f;">Disconnected</strong>';
+				
+				// Auto-reconnect with new token if not intentional disconnect
+				if (!intentionalDisconnect) {
+					console.log('Auto-reconnecting to WebSocket...');
+					setTimeout(() => {
+						if (!ws || ws.readyState !== WebSocket.OPEN) {
+							autoConnect();
+						}
+					}, 2000);
+				}
 			};
 		}
 		
