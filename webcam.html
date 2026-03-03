@@ -110,7 +110,7 @@
 			<h2>Streaming</h2>
 			<div>
 				<label for="frameRate">Frame Rate (FPS):</label>
-				<input type="number" id="frameRate" min="1" max="30" value="5" style="width: 60px;">
+				<input type="number" id="frameRate" min="1" max="30" value="20" style="width: 60px;">
 				<button id="startStream" disabled>Start Stream</button>
 				<button id="stopStream" disabled>Stop Stream</button>
 			</div>
@@ -148,6 +148,9 @@
 	// Flag to prevent auto-reconnect when intentionally disconnecting
 	let intentionalDisconnect = false;
 	
+	// Flag to auto-start camera and streaming on first connect
+	let firstConnect = true;
+	
 	// Load saved FPS from localStorage (non-sensitive preference)
 	const savedFPS = localStorage.getItem('webcam-fps');
 	if (savedFPS) {
@@ -178,6 +181,66 @@
 			updateStatus('streaming', 'Connected to server');
 			connectionStatusDiv.style.backgroundColor = '#c8e6c9';
 			connectionStatusDiv.innerHTML = '<strong style="color: #388e3c;">Connected - Ready to Stream</strong>';
+			
+			// Auto-start camera and streaming on first connect
+			if (firstConnect) {
+				firstConnect = false;
+				console.log('Auto-starting camera and streaming...');
+				
+				// Start camera
+				navigator.mediaDevices.getUserMedia({
+					video: { width: 320, height: 240 }
+				}).then(function(mediaStream) {
+					stream = mediaStream;
+					video.srcObject = stream;
+					startButton.disabled = true;
+					stopButton.disabled = false;
+					startStreamButton.disabled = false;
+					document.getElementById('fullscreenBtn').disabled = false;
+					document.getElementById('pipBtn').disabled = false;
+					updateStatus('connected', 'Camera started - ready to stream');
+					
+					// Auto-start streaming
+					setTimeout(function() {
+						if (ws && ws.readyState === WebSocket.OPEN) {
+							streaming = true;
+							frameCount = 0;
+							byteCount = 0;
+							startStreamButton.disabled = true;
+							stopStreamButton.disabled = false;
+							frameRateInput.disabled = true;
+							updateStatus('streaming', 'Streaming...');
+							
+							const frameInterval = 1000 / parseInt(frameRateInput.value);
+							
+							streamInterval = setInterval(function() {
+								if (!streaming || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+								
+								ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+								
+								canvas.toBlob(function(blob) {
+									if (streaming && ws && ws.readyState === WebSocket.OPEN) {
+										const reader = new FileReader();
+										reader.onload = function(e) {
+											ws.send(e.target.result);
+											frameCount++;
+											byteCount += blob.size;
+											
+											document.getElementById('frameCount').textContent = frameCount;
+											document.getElementById('byteCount').textContent = (byteCount / 1024).toFixed(1);
+											document.getElementById('avgSize').textContent = (byteCount / frameCount / 1024).toFixed(1);
+										};
+										reader.readAsArrayBuffer(blob);
+									}
+								}, 'image/jpeg', 0.7);
+							}, frameInterval);
+						}
+					}, 500);
+				}).catch(function(err) {
+					console.error('Error accessing camera:', err);
+					updateStatus('disconnected', 'Error: ' + err.message);
+				});
+			}
 		};
 		
 		ws.onmessage = function(event) {
@@ -375,11 +438,6 @@
 		} else {
 			alert('Picture-in-Picture is not supported in your browser');
 		}
-	});
-	
-	// Auto-connect on load
-	window.addEventListener('load', function() {
-		connectWebSocket();
 	});
 	
 	// Cleanup on unload
