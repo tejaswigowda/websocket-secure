@@ -9,13 +9,33 @@
   "scripts": {
     "start": "node cli.js"
   },
+  "author": "Tejaswi Gowda",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tejaswigowda/websocket-secure.git"
+  },
+  "homepage": "https://github.com/tejaswigowda/websocket-secure",
+  "bugs": {
+    "url": "https://github.com/tejaswigowda/websocket-secure/issues"
+  },
+  "files": [
+    "cli.js",
+    "app.js",
+    "server.js",
+    "https.js",
+    "index.html",
+    "webcam.html",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
   "dependencies": {
     "greenlock-store-fs": "^3.0.0",
     "greenlock-express": "^2.7.18",
     "ws": "^8.14.2"
-  },
-  "engines": {
-    "node": ">=14.0.0"
   },
   "keywords": [
     "websocket",
@@ -24,6 +44,9 @@
     "letsencrypt",
     "greenlock",
     "secure-auth",
-    "token-based-auth"
+    "token-based-auth",
+    "wss",
+    "real-time",
+    "encrypted"
   ]
 }
