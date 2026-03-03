@@ -19,7 +19,7 @@ if (!pem_email || !pem_domain) {
   console.log('Usage: node https.js <email> <domain> [http_port] [https_port] [username] [password] [staging]');
   console.log('');
   console.log('Arguments:');
-  console.log('  email      - Email for Let\\'s Encrypt certificate (required)');
+  console.log('  email      - Email for Lets Encrypt certificate (required)');
   console.log('  domain     - Domain name for certificate (required)');
   console.log('  http_port  - HTTP port (default: 8080)');
   console.log('  https_port - HTTPS port (default: 8443)');
