@@ -18,7 +18,8 @@
 		body.fullscreen #fullscreenBtn,
 		body.fullscreen #pipBtn,
 		body.fullscreen #streamStatus,
-		body.fullscreen h2 {
+		body.fullscreen h2,
+		body.fullscreen #connectionStatus {
 			display: none !important;
 		}
 
@@ -53,6 +54,8 @@
 			object-fit: contain;
 			background-color: #000;
 			cursor: pointer;
+			z-index: 10001;
+			margin-top: -5vh;
 		}
 
 
