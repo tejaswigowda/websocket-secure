@@ -1,13 +1,17 @@
 {
   "name": "wss-letsencrypt",
   "version": "1.0.0",
-  "description": "Self-validating SSL WebSocket Server using LetsEncrypt certificates",
-  "main": "server.js",
+  "description": "Self-validating SSL WebSocket Server using LetsEncrypt certificates with secure token-based authentication",
+  "main": "app.js",
+  "bin": {
+    "wss-server": "./cli.js"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node cli.js"
   },
   "dependencies": {
     "greenlock-store-fs": "^3.0.0",
+    "greenlock-express": "^2.7.18",
     "ws": "^8.14.2"
   },
   "engines": {
@@ -18,9 +22,8 @@
     "ssl",
     "https",
     "letsencrypt",
-    "greenlock"
-  ],
-  "devDependencies": {
-    "greenlock-express": "^2.7.18"
-  }
+    "greenlock",
+    "secure-auth",
+    "token-based-auth"
+  ]
 }

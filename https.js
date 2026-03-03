@@ -1,73 +1,82 @@
-/* Self-Validating SSL WebSocket Server */
-/* using LetsEncrypt Certs */
+/* Self-Validating SSL WebSocket Server with Let's Encrypt */
 
-// Parse command-line arguments
-const args = process.argv.slice(2);
-const pem_email = args[0] || process.env.PEM_EMAIL;
-const pem_domain = args[1] || process.env.PEM_DOMAIN;
-const http_port = (args[2] && !isNaN(args[2])) ? parseInt(args[2]) : (process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT) : 8080);
-const https_port = (args[3] && !isNaN(args[3])) ? parseInt(args[3]) : (process.env.HTTPS_PORT ? parseInt(process.env.HTTPS_PORT) : 8443);
-const ws_username = args[4] && args[4] !== 'staging' ? args[4] : (process.env.WS_USERNAME || null);
-const ws_password = args[5] && args[5] !== 'staging' ? args[5] : (process.env.WS_PASSWORD || null);
-const useStaging = (args[4] === 'staging' || args[6] === 'staging') || process.env.PRODUCTION === 'false';
-const debug = useStaging;
-const production = !useStaging;
+const path = require('path');
+const os = require('os');
+const { app, setupWebSocket } = require('./app.js');
 
-if (!pem_email || !pem_domain) { 
-  console.log('Missing required parameters!');
-  console.log('');
-  console.log('Usage: node https.js <email> <domain> [http_port] [https_port] [username] [password] [staging]');
-  console.log('');
-  console.log('Arguments:');
-  console.log('  email      - Email for Lets Encrypt certificate (required)');
-  console.log('  domain     - Domain name for certificate (required)');
-  console.log('  http_port  - HTTP port (default: 8080)');
-  console.log('  https_port - HTTPS port (default: 8443)');
-  console.log('  username   - WebSocket username (optional)');
-  console.log('  password   - WebSocket password (optional)');
-  console.log('  staging    - Use staging certs if set to "staging" (default: production)');
-  console.log('');
-  console.log('Examples:');
-  console.log('  node https.js user@example.com example.com');
-  console.log('  node https.js user@example.com example.com 3000 3443');
-  console.log('  node https.js user@example.com example.com 3000 3443 myuser mypass');
-  console.log('  node https.js user@example.com example.com 3000 3443 myuser mypass staging');
-  console.log('');
-  console.log('Or use environment variables:');
-  console.log('  PEM_EMAIL=user@example.com PEM_DOMAIN=example.com node https.js');
-  console.log('  HTTP_PORT=3000 HTTPS_PORT=3443 WS_USERNAME=myuser WS_PASSWORD=mypass PEM_EMAIL=user@example.com PEM_DOMAIN=example.com node https.js');
-  console.log('  PEM_EMAIL=user@example.com PEM_DOMAIN=example.com PRODUCTION=false node https.js');
-  process.exit(1); 
+function start(options = {}) {
+  const email = options.email || process.env.PEM_EMAIL;
+  const domain = options.domain || process.env.PEM_DOMAIN;
+  const httpPort = options.httpPort || parseInt(process.env.HTTP_PORT) || 8080;
+  const httpsPort = options.httpsPort || parseInt(process.env.HTTPS_PORT) || 8443;
+  const username = options.username || process.env.WS_USERNAME || null;
+  const password = options.password || process.env.WS_PASSWORD || null;
+  const staging = options.staging || process.env.PRODUCTION === 'false' || false;
+
+  // Validate required parameters
+  if (!email || !domain) {
+    console.error('\n❌ Error: HTTPS mode requires email and domain\n');
+    console.error('Usage: wss-server --email <email> --domain <domain> [options]\n');
+    process.exit(1);
+  }
+
+  const homeDir = path.join(os.homedir());
+  const acmeServer = staging
+    ? 'https://acme-staging-v02.api.letsencrypt.org/directory'
+    : 'https://acme-v02.api.letsencrypt.org/directory';
+
+  const server = require('greenlock-express').create({
+    version: 'draft-11',
+    server: acmeServer,
+    email: email,
+    agreeTos: true,
+    approveDomains: [domain],
+    store: require('greenlock-store-fs'),
+    configDir: homeDir,
+    app: app,
+  }).listen(httpPort, httpsPort);
+
+  // Setup WebSocket server after short delay
+  setTimeout(() => {
+    try {
+      setupWebSocket(server, { username: username, password: password });
+      console.log(`📡 HTTPS WebSocket Server ready!`);
+      if (username && password) {
+        console.log(`   🔐 Authentication enabled (username: ${username})`);
+      }
+      console.log(`   🔒 Mode: ${staging ? 'STAGING' : 'PRODUCTION'}`);
+      console.log(`   wss://${domain}:${httpsPort}/server - for sending apps`);
+      console.log(`   wss://${domain}:${httpsPort}/ - for web browsers`);
+      console.log(`   https://${domain}:${httpsPort}/ - browser client (auto-redirects to HTTPS)`);
+    } catch (err) {
+      console.error('Error setting up WebSocket:', err.message);
+      process.exit(1);
+    }
+  }, 1000);
+
+  return server;
 }
 
-if (debug) console.log('Debug Mode! Using staging certificates!');
-else console.log('Production Mode! Using real certificates!');
+// If run directly (for backward compatibility)
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const email = args[0] || process.env.PEM_EMAIL;
+  const domain = args[1] || process.env.PEM_DOMAIN;
+  const httpPort = (args[2] && !isNaN(args[2])) ? parseInt(args[2]) : null;
+  const httpsPort = (args[3] && !isNaN(args[3])) ? parseInt(args[3]) : null;
+  const username = args[4] && args[4] !== 'staging' ? args[4] : null;
+  const password = args[5] && args[5] !== 'staging' ? args[5] : null;
+  const staging = args[4] === 'staging' || args[6] === 'staging' || process.env.PRODUCTION === 'false';
 
-const { app, setupWebSocket } = require('./app.js');
-var homeDir = require('path').join(require('os').homedir());
+  start({
+    email: email,
+    domain: domain,
+    httpPort: httpPort,
+    httpsPort: httpsPort,
+    username: username,
+    password: password,
+    staging: staging,
+  });
+}
 
-var server = require('greenlock-express').create({
-  version: 'draft-11',
-  server: debug ? 'https://acme-staging-v02.api.letsencrypt.org/directory' : 'https://acme-v02.api.letsencrypt.org/directory',
-  email: pem_email,
-  agreeTos: true,
-  approveDomains: [pem_domain],
-  store: require('greenlock-store-fs'),
-  configDir: homeDir,
-  app: app
-}).listen(http_port, https_port);
-
-// Setup WebSocket server with 2 endpoints
-setTimeout(function() {
-  try {
-    setupWebSocket(server, { username: ws_username, password: ws_password });
-    console.log("WebSocket server is ready!");
-    if (ws_username && ws_password) {
-      console.log("  Authentication enabled (username: " + ws_username + ")");
-    }
-    console.log("  wss://" + pem_domain + ":" + https_port + "/server - for sending apps");
-    console.log("  wss://" + pem_domain + ":" + https_port + "/ - for web browsers");
-  } catch (e) {
-    console.error('Error setting up WebSocket:', e.message);
-  }
-}, 1000);
+module.exports = { start };
