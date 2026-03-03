@@ -145,6 +145,9 @@
 	// Auth token stored in memory only (session-based)
 	let authToken = null;
 	
+	// Flag to prevent auto-reconnect when intentionally disconnecting
+	let intentionalDisconnect = false;
+	
 	// Load saved FPS from localStorage (non-sensitive preference)
 	const savedFPS = localStorage.getItem('webcam-fps');
 	if (savedFPS) {
@@ -196,6 +199,16 @@
 			connectionStatusDiv.innerHTML = '<strong style="color: #d32f2f;">Disconnected</strong>';
 			streaming = false;
 			stopStreamButton.disabled = true;
+			
+			// Auto-reconnect with new token if not intentional disconnect
+			if (!intentionalDisconnect) {
+				console.log('Auto-reconnecting to WebSocket...');
+				setTimeout(() => {
+					if (!ws || ws.readyState !== WebSocket.OPEN) {
+						autoConnect();
+					}
+				}, 2000);
+			}
 		};
 	}
 	
@@ -239,6 +252,13 @@
 			startStreamButton.disabled = false;
 			document.getElementById('fullscreenBtn').disabled = false;
 			document.getElementById('pipBtn').disabled = false;
+			
+			// Ensure WebSocket is connected
+			if (!ws || ws.readyState !== WebSocket.OPEN) {
+				connectionStatusDiv.innerHTML = '<strong>Reconnecting to server...</strong>';
+				autoConnect();
+			}
+			
 			updateStatus('connected', 'Camera started - ready to stream');
 		} catch (err) {
 			console.error('Error accessing camera:', err);
@@ -262,8 +282,11 @@
 		document.getElementById('fullscreenBtn').disabled = true;
 		document.getElementById('pipBtn').disabled = true;
 		if (ws) {
+			intentionalDisconnect = true;
 			ws.close();
 			ws = null;
+			// Reset auto-reconnect flag after brief delay
+			setTimeout(() => { intentionalDisconnect = false; }, 500);
 		}
 		updateStatus('disconnected', 'Camera stopped');
 	});
