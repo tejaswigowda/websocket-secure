@@ -132,13 +132,8 @@
 
 	<h1>WebSocket Hello World</h1>
 	
-	<div id="authForm" style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; border-radius: 4px; display: none;">
-		<h3>WebSocket Authentication</h3>
-		<div style="margin: 10px 0;">
-			<input type="text" id="authUsername" placeholder="Username" style="padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;">
-			<input type="password" id="authPassword" placeholder="Password" style="padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;">
-			<button id="authConnect" style="background-color: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Connect</button>
-		</div>
+	<div id="connectionStatus" style="text-align: center; margin: 20px 0; padding: 10px; background-color: #fff3cd; border-radius: 4px;">
+		<strong>Connecting...</strong>
 	</div>
 	
 	<div style="text-align: center; margin: 20px 0;">
@@ -161,16 +156,10 @@
 	(function () {
 		// Message display element
 		const messagesDiv = document.getElementById('messages');
-		const authForm = document.getElementById('authForm');
-		const authUsername = document.getElementById('authUsername');
-		const authPassword = document.getElementById('authPassword');
-		const authConnect = document.getElementById('authConnect');
+		const connectionStatus = document.getElementById('connectionStatus');
 		
-		// Load saved credentials from localStorage
-		const savedUsername = localStorage.getItem('ws-username');
-		const savedPassword = localStorage.getItem('ws-password');
-		if (savedUsername) authUsername.value = savedUsername;
-		if (savedPassword) authPassword.value = savedPassword;
+		// Credentials stored in memory only (session-based, never persisted)
+		let authToken = null;
 		
 		// Simple reactive data store
 		const store = {};
@@ -267,10 +256,10 @@
 		let ws = null;
 		const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 		
-		function connectWebSocket(username = null, password = null) {
+		function connectWebSocket(token) {
 			let wsUrl = protocol + '//' + location.host;
-			if (username && password) {
-				wsUrl += '?username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password);
+			if (token) {
+				wsUrl += '?token=' + encodeURIComponent(token);
 			}
 			
 			ws = new WebSocket(wsUrl);
@@ -279,19 +268,15 @@
 			ws.onerror = function(error) {
 				console.error('WebSocket error:', error);
 				addMessage('WebSocket error: ' + error, 'error');
-				// Show auth form if connection fails (might be due to auth)
-				authForm.style.display = 'block';
+				connectionStatus.style.backgroundColor = '#ffcccb';
+				connectionStatus.innerHTML = '<strong style="color: #d32f2f;">Connection Error</strong>';
 			};
 			
 			ws.onopen = function() {
 				console.log('Connected to WebSocket server at ' + ws.url);
 				addMessage('Connected to WebSocket server', 'info');
-				authForm.style.display = 'none';
-				// Save credentials if provided
-				if (username && password) {
-					localStorage.setItem('ws-username', username);
-					localStorage.setItem('ws-password', password);
-				}
+				connectionStatus.style.backgroundColor = '#c8e6c9';
+				connectionStatus.innerHTML = '<strong style="color: #388e3c;">Connected</strong>';
 				// Write a value
 				data.put({ message: 'Hello world!' });
 			};
@@ -313,43 +298,34 @@
 			ws.onclose = function() {
 				console.log('Disconnected from WebSocket server');
 				addMessage('Disconnected from WebSocket server', 'error');
+				connectionStatus.style.backgroundColor = '#ffcccb';
+				connectionStatus.innerHTML = '<strong style="color: #d32f2f;">Disconnected</strong>';
 			};
 		}
 		
-		// Initial connection attempt
-		connectWebSocket(savedUsername, savedPassword);
-		
-		// Auto-connect with saved credentials on page load
-		if (savedUsername && savedPassword) {
-			// Credentials already saved, will connect automatically via connectWebSocket above
+		// Fetch auth token and connect automatically on page load
+		async function autoConnect() {
+			try {
+				connectionStatus.innerHTML = '<strong>Fetching security token...</strong>';
+				const response = await fetch('/auth');
+				if (!response.ok) {
+					throw new Error('Failed to get auth token');
+				}
+				const data = await response.json();
+				authToken = data.token;
+				
+				connectionStatus.innerHTML = '<strong>Connecting...</strong>';
+				connectWebSocket(authToken);
+			} catch (error) {
+				console.error('Auth error:', error);
+				addMessage('Authentication error: ' + error.message, 'error');
+				connectionStatus.style.backgroundColor = '#ffcccb';
+				connectionStatus.innerHTML = '<strong style="color: #d32f2f;">Auth Failed</strong>';
+			}
 		}
 		
-		// Auth form submit handler
-		authConnect.addEventListener('click', function() {
-			const username = authUsername.value;
-			const password = authPassword.value;
-			if (!username || !password) {
-				alert('Please enter both username and password');
-				return;
-			}
-			// Close existing connection
-			if (ws) ws.close();
-			// Try connecting with credentials
-			connectWebSocket(username, password);
-		});
-		
-		// Allow Enter key in password field
-		authPassword.addEventListener('keypress', function(e) {
-			if (e.key === 'Enter') authConnect.click();
-		});
-		
-		// Check if auth is required (but connection failed due to auth)
-		// Auto-show form after 2 seconds if not connected
-		setTimeout(function() {
-			if (!ws || ws.readyState !== WebSocket.OPEN) {
-				authForm.style.display = 'block';
-			}
-		}, 2000);
+		// Start auto-connect on page load
+		autoConnect();
 		
 		function addMessage(content, type = 'info') {
 			const msgEl = document.createElement('div');

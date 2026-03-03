@@ -88,13 +88,8 @@
 <body>
 	<h1>🎥 Webcam JPEG Streamer</h1>
 	
-	<div id="authForm" style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; border-radius: 4px; display: none;">
-		<h3>WebSocket Authentication</h3>
-		<div style="margin: 10px 0;">
-			<input type="text" id="authUsername" placeholder="Username" style="padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;">
-			<input type="password" id="authPassword" placeholder="Password" style="padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;">
-			<button id="authConnect" style="background-color: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Connect</button>
-		</div>
+	<div id="connectionStatus" style="text-align: center; margin: 20px 0; padding: 10px; background-color: #fff3cd; border-radius: 4px;">
+		<strong>Initializing...</strong>
 	</div>
 	
 	<div class="container">
@@ -133,6 +128,7 @@
 	const canvas = document.getElementById('canvas');
 	const ctx = canvas.getContext('2d');
 	const statusDiv = document.getElementById('status');
+	const connectionStatusDiv = document.getElementById('connectionStatus');
 	const startButton = document.getElementById('startButton');
 	const stopButton = document.getElementById('stopButton');
 	const startStreamButton = document.getElementById('startStream');
@@ -146,13 +142,10 @@
 	let byteCount = 0;
 	let streamInterval = null;
 	
-	// Load saved credentials from localStorage
-	const savedUsername = localStorage.getItem('ws-username');
-	const savedPassword = localStorage.getItem('ws-password');
-	if (savedUsername) authUsername.value = savedUsername;
-	if (savedPassword) authPassword.value = savedPassword;
+	// Auth token stored in memory only (session-based)
+	let authToken = null;
 	
-	// Load saved FPS from localStorage
+	// Load saved FPS from localStorage (non-sensitive preference)
 	const savedFPS = localStorage.getItem('webcam-fps');
 	if (savedFPS) {
 		frameRateInput.value = savedFPS;
@@ -167,11 +160,11 @@
 	});
 	
 	// Connect to WebSocket
-	function connectWebSocket(username = null, password = null) {
+	function connectWebSocket(token) {
 		const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 		let wsUrl = protocol + '//' + location.host + '/server';
-		if (username && password) {
-			wsUrl += '?username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password);
+		if (token) {
+			wsUrl += '?token=' + encodeURIComponent(token);
 		}
 		
 		ws = new WebSocket(wsUrl);
@@ -179,51 +172,50 @@
 		
 		ws.onopen = function() {
 			console.log('Connected to WebSocket server');
-			updateStatus('connected', 'Connected to server');
-			document.getElementById('connectionStatus').textContent = 'Connected';
-			authForm.style.display = 'none';
-			// Save credentials if provided
-			if (username && password) {
-				localStorage.setItem('ws-username', username);
-				localStorage.setItem('ws-password', password);
-			}
+			updateStatus('streaming', 'Connected to server');
+			connectionStatusDiv.style.backgroundColor = '#c8e6c9';
+			connectionStatusDiv.innerHTML = '<strong style="color: #388e3c;">Connected - Ready to Stream</strong>';
 		};
 		
 		ws.onerror = function(err) {
 			console.error('WebSocket error:', err);
 			updateStatus('disconnected', 'WebSocket error');
-			document.getElementById('connectionStatus').textContent = 'Error';
-			// Show auth form if connection fails
-			authForm.style.display = 'block';
+			connectionStatusDiv.style.backgroundColor = '#ffcccb';
+			connectionStatusDiv.innerHTML = '<strong style="color: #d32f2f;">Connection Failed</strong>';
 		};
 		
 		ws.onclose = function() {
 			console.log('Disconnected from WebSocket server');
 			updateStatus('disconnected', 'Disconnected from server');
-			document.getElementById('connectionStatus').textContent = 'Disconnected';
+			connectionStatusDiv.style.backgroundColor = '#ffcccb';
+			connectionStatusDiv.innerHTML = '<strong style="color: #d32f2f;">Disconnected</strong>';
 			streaming = false;
 			stopStreamButton.disabled = true;
 		};
 	}
 	
-	// Auth form submit handler
-	authConnect.addEventListener('click', function() {
-		const username = authUsername.value;
-		const password = authPassword.value;
-		if (!username || !password) {
-			alert('Please enter both username and password');
-			return;
+	// Fetch auth token and connect automatically
+	async function autoConnect() {
+		try {
+			connectionStatusDiv.innerHTML = '<strong>Fetching security token...</strong>';
+			const response = await fetch('/auth');
+			if (!response.ok) {
+				throw new Error('Failed to get auth token');
+			}
+			const data = await response.json();
+			authToken = data.token;
+			
+			connectionStatusDiv.innerHTML = '<strong>Connecting...</strong>';
+			connectWebSocket(authToken);
+		} catch (error) {
+			console.error('Auth error:', error);
+			connectionStatusDiv.style.backgroundColor = '#ffcccb';
+			connectionStatusDiv.innerHTML = '<strong style="color: #d32f2f;">Auth Failed: ' + error.message + '</strong>';
 		}
-		// Close existing connection
-		if (ws) ws.close();
-		// Try connecting with credentials
-		connectWebSocket(username, password);
-	});
+	}
 	
-	// Allow Enter key in password field
-	authPassword.addEventListener('keypress', function(e) {
-		if (e.key === 'Enter') authConnect.click();
-	});
+	// Start auto-connect on page load
+	autoConnect();
 	
 	function updateStatus(className, text) {
 		statusDiv.className = className;
@@ -242,8 +234,7 @@
 			startStreamButton.disabled = false;
 			document.getElementById('fullscreenBtn').disabled = false;
 			document.getElementById('pipBtn').disabled = false;
-			connectWebSocket(savedUsername, savedPassword);
-			updateStatus('connected', 'Camera started');
+			updateStatus('connected', 'Camera started - ready to stream');
 		} catch (err) {
 			console.error('Error accessing camera:', err);
 			updateStatus('disconnected', 'Error: ' + err.message);

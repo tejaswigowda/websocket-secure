@@ -5,10 +5,13 @@ A self-validating SSL WebSocket server using Let's Encrypt certificates. Feature
 ## Features
 
 - 🔒 **Automatic SSL/TLS** - Auto-renews Let's Encrypt certificates
+- � **WebSocket Authentication** - Optional username/password protection
 - 🔄 **Dual WebSocket Endpoints** - Separate endpoints for server and client
 - 💾 **Data Persistence** - In-memory store with JSON persistence
 - 🌐 **HTTP & HTTPS Support** - HTTP for testing, HTTPS for production
 - 📊 **Real-time Broadcasting** - Messages broadcast to all connected clients
+- 🎥 **Responsive UI** - Fullscreen video streaming with authentication
+- 💾 **Client-side Auth Storage** - Auto-login with localStorage credentials
 
 ## Architecture
 
@@ -26,10 +29,11 @@ A self-validating SSL WebSocket server using Let's Encrypt certificates. Feature
 
 ### Files
 
-- **`app.js`** - Core WebSocket logic and HTTP request handler
+- **`app.js`** - Core WebSocket logic, HTTP request handler, and authentication
 - **`server.js`** - HTTP server for local testing
 - **`https.js`** - HTTPS server with Let's Encrypt (production)
-- **`index.html`** - Web UI for viewing messages
+- **`index.html`** - Web UI for viewing messages with auth form
+- **`webcam.html`** - Webcam streaming interface with auth
 - **`data.json`** - Persistent data store (auto-created)
 
 ## Installation
@@ -43,7 +47,7 @@ npm install
 ### Local Testing (HTTP)
 
 ```bash
-node server.js [PORT]
+node server.js [PORT] [USERNAME] [PASSWORD]
 ```
 
 Server runs on `http://localhost:PORT`
@@ -55,32 +59,49 @@ Server runs on `http://localhost:PORT`
 ```bash
 node server.js              # Use default port 3000
 node server.js 8000         # Use custom port 8000
+node server.js 3000 admin secret  # With auth
 PORT=4000 node server.js    # Or set via environment variable
+PORT=3000 WS_USERNAME=admin WS_PASSWORD=secret node server.js
 ```
 
 ### Production (HTTPS)
 
 ```bash
-node https.js <email> <domain> [staging]
+node https.js <email> <domain> [HTTP_PORT] [HTTPS_PORT] [USERNAME] [PASSWORD]
 ```
 
 Server runs on HTTPS with Let's Encrypt certificates (production by default)
 
 **Arguments:**
 - `email` - Email for Let's Encrypt certificate (required)
-- `domain` - Domain name for certificate (required)  
-- `staging` - Use staging certificates if set to "staging" (default: production)
+- `domain` - Domain name for certificate (required)
+- `HTTP_PORT` - HTTP port for Let's Encrypt validation (optional, default: 8080)
+- `HTTPS_PORT` - HTTPS port (optional, default: 8443)
+- `USERNAME` - WebSocket username (optional)
+- `PASSWORD` - WebSocket password (optional)
 
 **Examples:**
 ```bash
-# Production certificates (default)
+# Production with default ports
 node https.js user@example.com example.com
 
-# Staging certificates (for testing)
-node https.js user@example.com example.com staging
+# With custom ports
+node https.js user@example.com example.com 8080 8443
+
+# With authentication
+node https.js user@example.com example.com 8080 8443 admin secret
+
+# With staging certificates
+node https.js user@example.com example.com 8080 8443 staging
 
 # Or use environment variables
-PEM_EMAIL=user@example.com PEM_DOMAIN=example.com node https.js
+PEM_EMAIL=user@example.com \
+PEM_DOMAIN=example.com \
+WS_USERNAME=admin \
+WS_PASSWORD=secret \
+node https.js
+
+# Staging environment
 PEM_EMAIL=user@example.com PEM_DOMAIN=example.com PRODUCTION=false node https.js
 ```
 
@@ -94,20 +115,49 @@ Server endpoints:
 
 **server.js:**
 ```bash
-node server.js [PORT]
+node server.js [PORT] [USERNAME] [PASSWORD]
 ```
 
 **https.js:**
 ```bash
-node https.js <email> <domain> [staging]
+node https.js <email> <domain> [HTTP_PORT] [HTTPS_PORT] [USERNAME] [PASSWORD]
 ```
 
 ### Environment Variables (Fallback)
 
-- `PORT` - HTTP port for local testing (default: 3000)
+### Secure Token-Based Authentication
+
+When `WS_USERNAME` and `WS_PASSWORD` are configured, both index.html and webcam.html use a secure automatic authentication flow:
+
+1. **Client requests auth token** on page load via `/auth` endpoint
+2. **Server generates temporary token** (valid for 15 minutes)
+3. **Client uses token** to establish WebSocket connection (never stores token)
+4. **Token is never persisted** - automatically discarded on page refresh
+5. **Browser history never contains credentials** - token is session-only
+
+**Benefits:**
+- Zero user interaction required - completely automatic
+- Credentials never transmitted multiple times
+- Tokens are short-lived (15 minute expiry)
+- No localStorage/sessionStorage usage
+- Browser history stays clean
+
+### Fallback Authentication (Legacy)
+
+If needed, you can still use username/password directly:
+- **HTTP Authorization Header** (for external apps)
+- **URL Query Parameters** (fallback only)
+
+These are less secure due to logging/history exposure, but tokens are checked first.
+
+### Environment Variables (Fallback)
+
+- `PORT` - HTTP port for server.js (default: 3000)
 - `PEM_EMAIL` - Email for Let's Encrypt certificate (required for HTTPS)
 - `PEM_DOMAIN` - Domain name for certificate (required for HTTPS)
 - `PRODUCTION` - Set to `false` to use staging certificates (default: true/production)
+- `WS_USERNAME` - WebSocket authentication username (optional)
+- `WS_PASSWORD` - WebSocket authentication password (optional)
 
 ## Message Format
 

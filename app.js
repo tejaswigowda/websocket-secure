@@ -3,11 +3,16 @@
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const crypto = require('crypto');
 const { Server: WebSocketServer } = require('ws');
 
 // In-memory data store (persisted to data.json)
 const DATA_FILE = path.join(__dirname, 'data.json');
 let store = {};
+
+// Temporary auth token store (expires after TOKEN_LIFETIME)
+const TOKEN_LIFETIME = 15 * 60 * 1000; // 15 minutes in milliseconds
+const authTokens = new Map(); // token -> { expiry, createdAt }
 
 // Load existing data
 try {
@@ -23,7 +28,45 @@ function saveData() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2));
 }
 
+// Generate a secure temporary auth token
+function generateAuthToken() {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiry = Date.now() + TOKEN_LIFETIME;
+  authTokens.set(token, { expiry, createdAt: Date.now() });
+  
+  // Clean up expired tokens periodically
+  if (authTokens.size > 100) {
+    const now = Date.now();
+    for (const [t, data] of authTokens) {
+      if (data.expiry < now) {
+        authTokens.delete(t);
+      }
+    }
+  }
+  
+  return token;
+}
+
+// Check if token is valid
+function isTokenValid(token) {
+  const data = authTokens.get(token);
+  if (!data) return false;
+  if (data.expiry < Date.now()) {
+    authTokens.delete(token);
+    return false;
+  }
+  return true;
+}
+
 var app = function(req, res) {
+  // Handle /auth endpoint - returns a temporary token
+  if (req.url === '/auth') {
+    const token = generateAuthToken();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ token, lifetime: TOKEN_LIFETIME }));
+    return;
+  }
+  
   // Serve static files
   const filePath = req.url === '/' ? '/index.html' : req.url;
   const fullPath = path.join(__dirname, filePath);
@@ -46,6 +89,13 @@ function setupWebSocket(server, auth = {}) {
       return true; // No auth required
     }
     
+    // Check for valid temporary token first (preferred method)
+    const parsedUrl = url.parse(request.url, true);
+    const token = parsedUrl.query.token;
+    if (token && isTokenValid(token)) {
+      return true; // Token is valid
+    }
+    
     // Check Authorization header (Basic auth)
     const authHeader = request.headers.authorization || '';
     if (authHeader.startsWith('Basic ')) {
@@ -60,8 +110,7 @@ function setupWebSocket(server, auth = {}) {
       }
     }
     
-    // Check URL query parameters (for browser WebSocket)
-    const parsedUrl = url.parse(request.url, true);
+    // Check URL query parameters (fallback for username/password)
     const username = parsedUrl.query.username;
     const password = parsedUrl.query.password;
     return username === auth.username && password === auth.password;
