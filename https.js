@@ -22,8 +22,10 @@ if (!pem_email || !pem_domain) {
   console.log('  email      - Email for Let\\'s Encrypt certificate (required)');
   console.log('  domain     - Domain name for certificate (required)');
   console.log('  http_port  - HTTP port (default: 8080)');
-  console.log('  https_port - HTTPS port (default: 8443)');  console.log('  username   - WebSocket username (optional)');
-  console.log('  password   - WebSocket password (optional)');  console.log('  staging    - Use staging certs if set to "staging" (default: production)');
+  console.log('  https_port - HTTPS port (default: 8443)');
+  console.log('  username   - WebSocket username (optional)');
+  console.log('  password   - WebSocket password (optional)');
+  console.log('  staging    - Use staging certs if set to "staging" (default: production)');
   console.log('');
   console.log('Examples:');
   console.log('  node https.js user@example.com example.com');
