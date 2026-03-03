@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+	<meta charset='UTF-8'>
+	<title>WebSocket Hello</title>
+	<style>
+		body {
+			font-family: sans-serif;
+			color: #303438;
+			text-align: center;
+		}
+		#messages {
+			border: 1px solid #ccc;
+			padding: 15px;
+			margin: 20px auto;
+			width: 80%;
+			max-width: 800px;
+			height: 500px;
+			overflow-y: auto;
+			background-color: #f9f9f9;
+			text-align: left;
+		}
+		.message {
+			padding: 12px;
+			margin: 8px 0;
+			background-color: #e8f4f8;
+			border-left: 3px solid #2196F3;
+			border-radius: 4px;
+		}
+		.message.error {
+			background-color: #ffebee;
+			border-left-color: #f44336;
+		}
+		.message.info {
+			background-color: #e3f2fd;
+			border-left-color: #2196F3;
+		}
+		.message img {
+			max-width: 100%;
+			max-height: 400px;
+			border-radius: 4px;
+			margin-top: 8px;
+		}
+		.message pre {
+			background-color: #f5f5f5 !important;
+			padding: 10px !important;
+			border-radius: 4px !important;
+			overflow: auto !important;
+			max-height: 400px !important;
+			font-size: 12px !important;
+		}
+		strong {
+			color: #1976D2;
+		}
+	</style>
+</head>
+<body>
+
+	<h1>WebSocket Hello World</h1>
+	
+	<div style="text-align: center; margin: 20px 0;">
+		<h2>Video Stream</h2>
+		<div style="position: relative; display: inline-block; width: 100%; max-width: 900px;">
+			<img id="videoStream" style="max-width: 100%; max-height: 600px; border: 2px solid #ccc; border-radius: 4px; display: none; cursor: pointer;">
+			<div style="margin-top: 10px;">
+				<button id="fullscreenBtn" style="display: none; background-color: #1976D2; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 5px;">⛶ Fullscreen</button>
+				<button id="pipBtn" style="display: none; background-color: #1976D2; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">🖼 Picture-in-Picture</button>
+			</div>
+		</div>
+		<div id="streamStatus" style="margin-top: 10px; font-weight: bold; color: #999;">No stream</div>
+	</div>
+	
+	<div id="messages"></div>
+
+	<script>
+	(function () {
+		// Message display element
+		const messagesDiv = document.getElementById('messages');
+		
+		// Connect to WebSocket server
+		const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+		const ws = new WebSocket(protocol + '//' + location.host);
+		ws.binaryType = 'arraybuffer'; // Accept binary frames as ArrayBuffer
+		
+		function addMessage(content, type = 'info') {
+			const msgEl = document.createElement('div');
+			msgEl.className = 'message ' + type;
+			const timeStr = new Date().toLocaleTimeString();
+			
+			// If content is an HTML element, append it
+			if (content instanceof HTMLElement) {
+				const wrapper = document.createElement('div');
+				wrapper.innerHTML = '<strong>' + timeStr + '</strong><br>';
+				wrapper.appendChild(content);
+				msgEl.appendChild(wrapper);
+			} else {
+				// Text content
+				msgEl.textContent = timeStr + ' - ' + content;
+			}
+			
+			messagesDiv.appendChild(msgEl);
+			messagesDiv.scrollTop = messagesDiv.scrollHeight;
+		}
+
+		function addJSON(obj, type = 'info') {
+			const msgEl = document.createElement('div');
+			msgEl.className = 'message ' + type;
+			const timeStr = new Date().toLocaleTimeString();
+			
+			const wrapper = document.createElement('div');
+			wrapper.innerHTML = '<strong>' + timeStr + ' - JSON:</strong>';
+			
+			const pre = document.createElement('pre');
+			pre.style.backgroundColor = '#f5f5f5';
+			pre.style.padding = '10px';
+			pre.style.borderRadius = '4px';
+			pre.style.overflow = 'auto';
+			pre.style.maxHeight = '400px';
+			pre.textContent = JSON.stringify(obj, null, 2);
+			
+			wrapper.appendChild(pre);
+			msgEl.appendChild(wrapper);
+			messagesDiv.appendChild(msgEl);
+			messagesDiv.scrollTop = messagesDiv.scrollHeight;
+		}
+
+		function addImage(src, type = 'info') {
+			const msgEl = document.createElement('div');
+			msgEl.className = 'message ' + type;
+			const timeStr = new Date().toLocaleTimeString();
+			
+			const wrapper = document.createElement('div');
+			wrapper.innerHTML = '<strong>' + timeStr + ' - Image:</strong><br>';
+			
+			const img = document.createElement('img');
+			img.src = src;
+			img.style.maxWidth = '100%';
+			img.style.maxHeight = '400px';
+			img.style.marginTop = '10px';
+			img.onerror = function() {
+				this.style.display = 'none';
+				wrapper.innerHTML += '<em>Failed to load image</em>';
+			};
+			
+			wrapper.appendChild(img);
+			msgEl.appendChild(wrapper);
+			messagesDiv.appendChild(msgEl);
+			messagesDiv.scrollTop = messagesDiv.scrollHeight;
+		}
+
+		// Simple reactive data store
+		const store = {};
+		const listeners = {};
+
+		// Simple API similar to Gun
+		const data = {
+			put: function(value) {
+				ws.send(JSON.stringify({ type: 'put', key: 'data', value }));
+			},
+			get: function(prop) {
+				return {
+					on: function(callback) {
+						if (!listeners[prop]) listeners[prop] = [];
+						listeners[prop].push(callback);
+						// If we already have the value, call immediately
+						if (store.data && store.data[prop] !== undefined) {
+							callback(store.data[prop]);
+						}
+					}
+				};
+			}
+		};
+
+		ws.onopen = function() {
+			console.log('Connected to WebSocket server at ' + ws.url);
+			addMessage('Connected to WebSocket server', 'info');
+			console.log('Connected to WebSocket server');
+			// Write a value
+			data.put({ message: 'Hello world!' });
+		};
+
+		ws.onmessage = function(event) {
+			// Handle different data types
+			if (event.data instanceof Blob) {
+				// Binary blob data
+				handleBinaryData(event.data);
+			} else if (event.data instanceof ArrayBuffer) {
+				// Binary array buffer
+				handleBinaryData(new Blob([event.data]));
+			} else if (typeof event.data === 'string') {
+				// Text data
+				processMessage(event.data);
+			}
+		};
+
+		// Video stream tracking
+		let frameCount = 0;
+		let lastFrameTime = Date.now();
+		let currentFPS = 0;
+
+		function handleBinaryData(blob) {
+			// Check if it's image data by looking at magic bytes
+			const reader = new FileReader();
+			reader.onload = function(e) {
+				const arr = new Uint8Array(e.target.result).subarray(0, 4);
+				let isImage = false;
+				
+				// Check magic bytes for common image formats
+				// JPEG: FFD8FF, PNG: 89504E47, GIF: 474946, WebP: RIFF...WEBP
+				if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) {
+					isImage = true; // JPEG
+				} else if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) {
+					isImage = true; // PNG
+				} else if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46) {
+					isImage = true; // GIF
+				}
+				
+				if (isImage) {
+					// Update video stream with new frame
+					const url = URL.createObjectURL(blob);
+					updateVideoStream(url);
+				} else {
+					// Try to decode as text
+					reader.onload = null;
+					const textReader = new FileReader();
+					textReader.onload = function() {
+						processMessage(textReader.result);
+					};
+					textReader.readAsText(blob);
+				}
+			};
+			reader.readAsArrayBuffer(blob);
+		}
+
+		function updateVideoStream(imageSrc) {
+			const videoStreamImg = document.getElementById('videoStream');
+			const streamStatus = document.getElementById('streamStatus');
+			const fullscreenBtn = document.getElementById('fullscreenBtn');
+			const pipBtn = document.getElementById('pipBtn');
+			
+			// Clean up old object URL
+			if (videoStreamImg.src && videoStreamImg.src.startsWith('blob:')) {
+				URL.revokeObjectURL(videoStreamImg.src);
+			}
+			
+			// Update image source
+			videoStreamImg.src = imageSrc;
+			videoStreamImg.style.display = 'block';
+			fullscreenBtn.style.display = 'inline-block';
+			pipBtn.style.display = 'inline-block';
+			
+			// Calculate and display FPS
+			frameCount++;
+			const now = Date.now();
+			const elapsed = (now - lastFrameTime) / 1000;
+			if (elapsed >= 1) {
+				currentFPS = Math.round(frameCount / elapsed);
+				frameCount = 0;
+				lastFrameTime = now;
+			}
+			
+			streamStatus.style.color = '#2e7d32';
+			streamStatus.textContent = '🟢 Streaming - ' + currentFPS + ' FPS';
+		}
+
+		// Fullscreen handler
+		document.getElementById('fullscreenBtn').addEventListener('click', function() {
+			const videoStream = document.getElementById('videoStream');
+			if (videoStream.requestFullscreen) {
+				videoStream.requestFullscreen();
+			} else if (videoStream.webkitRequestFullscreen) {
+				videoStream.webkitRequestFullscreen();
+			} else if (videoStream.mozRequestFullScreen) {
+				videoStream.mozRequestFullScreen();
+			} else if (videoStream.msRequestFullscreen) {
+				videoStream.msRequestFullscreen();
+			}
+		});
+
+		// Picture-in-Picture handler
+		document.getElementById('pipBtn').addEventListener('click', function() {
+			const videoStream = document.getElementById('videoStream');
+			if (document.pictureInPictureEnabled && videoStream) {
+				if (document.pictureInPictureElement) {
+					document.exitPictureInPicture();
+				} else {
+					videoStream.requestPictureInPicture().catch(err => {
+						console.error('Error requesting picture-in-picture:', err);
+					});
+				}
+			} else {
+				alert('Picture-in-Picture is not supported in your browser');
+			}
+		});
+
+		function processMessage(data) {
+			try {
+				const msg = JSON.parse(data);
+				console.log('Parsed JSON:', msg);
+				
+				// Check if it contains image data
+				if (msg.data && msg.data.startsWith('data:image')) {
+					addImage(msg.data);
+					return;
+				}
+				if (msg.src && (msg.src.startsWith('http') || msg.src.startsWith('data:image'))) {
+					addImage(msg.src);
+					return;
+				}
+				if (msg.url && (msg.url.startsWith('http') || msg.url.startsWith('data:image'))) {
+					addImage(msg.url);
+					return;
+				}
+				
+				// Check for explicit type handling (legacy)
+				if (msg.type === 'image' && (msg.data || msg.src || msg.url)) {
+					const imageSrc = msg.data || msg.src || msg.url;
+					addImage(imageSrc);
+					return;
+				}
+				
+				// Handle sync/update messages
+				if (msg.type === 'sync') {
+					Object.assign(store, msg.data);
+					addMessage('Synced data: ' + JSON.stringify(store), 'info');
+					console.log('Synced data:', store);
+					return;
+				}
+				if (msg.type === 'update') {
+					store[msg.key] = msg.value;
+					addMessage('Updated ' + msg.key + ': ' + JSON.stringify(msg.value), 'info');
+					if (msg.value) {
+						Object.keys(msg.value).forEach(function(prop) {
+							if (listeners[prop]) {
+								listeners[prop].forEach(function(cb) {
+									cb(msg.value[prop]);
+								});
+							}
+						});
+					}
+					return;
+				}
+				
+				// Default: display as formatted JSON
+				addJSON(msg);
+			} catch (e) {
+				// Not JSON - check if it's an image URL or base64
+				if (data.startsWith('data:image') || data.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
+					addImage(data);
+				} else {
+					// Plain text
+					addMessage('Raw data: ' + data);
+				}
+				console.log('Not JSON, displaying as raw text or image');
+			}
+		}
+
+		ws.onerror = function(err) {
+			addMessage('WebSocket error: ' + err, 'error');
+			document.getElementById('streamStatus').textContent = '🔴 WebSocket error';
+			document.getElementById('streamStatus').style.color = '#c62828';
+			console.error('WebSocket error:', err);
+		};
+
+		ws.onclose = function() {
+			addMessage('Disconnected from WebSocket server', 'error');
+			document.getElementById('streamStatus').textContent = '🔴 Disconnected';
+			document.getElementById('streamStatus').style.color = '#c62828';
+			console.log('Disconnected from WebSocket server');
+		};
+
+		// Expose for console access
+		window.data = data;
+		window.ws = ws;
+		window.store = store;
+		window.addMessage = addMessage;
+		window.addJSON = addJSON;
+		window.addImage = addImage;
+		console.log('WebSocket reference exposed as %cwindow.ws', 'color: red');
+		console.log('Data API exposed as %cwindow.data', 'color: red');
+		console.log('View functions: %cwindow.addMessage, addJSON, addImage', 'color: red');
+
+		// Listen for real-time changes
+		data.get('message').on(function(message) {
+			addMessage('Data message: ' + message);
+		});
+	}())
+	</script>
+  
+</body>
+</html>

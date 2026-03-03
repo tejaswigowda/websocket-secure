@@ -1,0 +1,26 @@
+{
+  "name": "wss-letsencrypt",
+  "version": "1.0.0",
+  "description": "Self-validating SSL WebSocket Server using LetsEncrypt certificates",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "greenlock-store-fs": "^3.0.0",
+    "ws": "^8.14.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "websocket",
+    "ssl",
+    "https",
+    "letsencrypt",
+    "greenlock"
+  ],
+  "devDependencies": {
+    "greenlock-express": "^2.7.18"
+  }
+}
