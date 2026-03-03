@@ -35,10 +35,37 @@ var app = function(req, res) {
 };
 
 // Setup WebSocket server with 2 endpoints
-function setupWebSocket(server) {
+function setupWebSocket(server, auth = {}) {
   // Create two separate WebSocket servers with noServer option
   const wss1 = new WebSocketServer({ noServer: true }); // /server endpoint
   const wss2 = new WebSocketServer({ noServer: true }); // /client endpoint
+  
+  // Authentication function
+  function authenticate(request) {
+    if (!auth.username || !auth.password) {
+      return true; // No auth required
+    }
+    
+    // Check Authorization header (Basic auth)
+    const authHeader = request.headers.authorization || '';
+    if (authHeader.startsWith('Basic ')) {
+      try {
+        const credentials = Buffer.from(authHeader.substring(6), 'base64').toString('utf-8');
+        const [username, password] = credentials.split(':');
+        if (username === auth.username && password === auth.password) {
+          return true;
+        }
+      } catch (e) {
+        // Fall through to check URL params
+      }
+    }
+    
+    // Check URL query parameters (for browser WebSocket)
+    const parsedUrl = url.parse(request.url, true);
+    const username = parsedUrl.query.username;
+    const password = parsedUrl.query.password;
+    return username === auth.username && password === auth.password;
+  }
 
   const clients1 = new Set(); // server endpoint clients
   const clients2 = new Set(); // client endpoint clients
@@ -165,6 +192,13 @@ function setupWebSocket(server) {
   // Handle HTTP upgrade requests and route to correct WebSocket server
   server.on('upgrade', function upgrade(request, socket, head) {
     const pathname = url.parse(request.url).pathname;
+    
+    // Check authentication
+    if (!authenticate(request)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
 
     if (pathname === '/server') {
       wss1.handleUpgrade(request, socket, head, function done(ws) {

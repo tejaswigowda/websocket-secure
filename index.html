@@ -2,13 +2,66 @@
 <html lang='en'>
 <head>
 	<meta charset='UTF-8'>
-	<title>WebSocket Hello</title>
+	<title>WebSocket Test</title>
 	<style>
+		body.fullscreen {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+			background-color: #000;
+			color: #000;
+		}
+
+		body.fullscreen h1,
+		body.fullscreen #authForm,
+		body.fullscreen #messages,
+		body.fullscreen #fullscreenBtn,
+		body.fullscreen #pipBtn,
+		body.fullscreen #streamStatus,
+		body.fullscreen h2 {
+			display: none !important;
+		}
+
+		body.fullscreen > div:nth-of-type(2) {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100vw;
+			height: 100vh;
+			margin: 0;
+			display: flex !important;
+			justify-content: center;
+			align-items: center;
+			z-index: 10000;
+		}
+
+		body.fullscreen .video-container {
+			width: 100%;
+			height: 100%;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			min-height: auto;
+		}
+
+		body.fullscreen #videoStream {
+			display: block !important;
+			border: none;
+			border-radius: 0;
+			width: 100vw;
+			height: 100vh;
+			object-fit: contain;
+			background-color: #000;
+			cursor: pointer;
+		}
+
+
 		body {
 			font-family: sans-serif;
 			color: #303438;
 			text-align: center;
 		}
+
 		#messages {
 			border: 1px solid #ccc;
 			padding: 15px;
@@ -20,6 +73,27 @@
 			background-color: #f9f9f9;
 			text-align: left;
 		}
+		
+		.video-container {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			width: 100%;
+			min-height: 400px;
+			margin: 20px 0;
+		}
+		
+		.video-container img {
+			max-width: 100%;
+			max-height: 600px;
+			width: auto;
+			height: auto;
+			border: 2px solid #ccc;
+			border-radius: 4px;
+			display: none;
+			cursor: pointer;
+		}
+		
 		.message {
 			padding: 12px;
 			margin: 8px 0;
@@ -58,14 +132,23 @@
 
 	<h1>WebSocket Hello World</h1>
 	
+	<div id="authForm" style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; border-radius: 4px; display: none;">
+		<h3>WebSocket Authentication</h3>
+		<div style="margin: 10px 0;">
+			<input type="text" id="authUsername" placeholder="Username" style="padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;">
+			<input type="password" id="authPassword" placeholder="Password" style="padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;">
+			<button id="authConnect" style="background-color: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Connect</button>
+		</div>
+	</div>
+	
 	<div style="text-align: center; margin: 20px 0;">
 		<h2>Video Stream</h2>
-		<div style="position: relative; display: inline-block; width: 100%; max-width: 900px;">
-			<img id="videoStream" style="max-width: 100%; max-height: 600px; border: 2px solid #ccc; border-radius: 4px; display: none; cursor: pointer;">
-			<div style="margin-top: 10px;">
-				<button id="fullscreenBtn" style="display: none; background-color: #1976D2; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 5px;">⛶ Fullscreen</button>
-				<button id="pipBtn" style="display: none; background-color: #1976D2; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">🖼 Picture-in-Picture</button>
-			</div>
+		<div class="video-container">
+			<img id="videoStream" style="cursor: pointer;">
+		</div>
+		<div style="margin-top: 10px;">
+			<button id="fullscreenBtn" style="display: none; background-color: #1976D2; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 5px;">⛶ Fullscreen</button>
+			<button id="pipBtn" style="display: none; background-color: #1976D2; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">🖼 Picture-in-Picture</button>
 		</div>
 		<div id="streamStatus" style="margin-top: 10px; font-weight: bold; color: #999;">No stream</div>
 	</div>
@@ -73,14 +156,25 @@
 	<div id="messages"></div>
 
 	<script>
+		var hash = location.hash.replace('#', '');
+		document.body.className = hash;
 	(function () {
 		// Message display element
 		const messagesDiv = document.getElementById('messages');
+		const authForm = document.getElementById('authForm');
+		const authUsername = document.getElementById('authUsername');
+		const authPassword = document.getElementById('authPassword');
+		const authConnect = document.getElementById('authConnect');
 		
-		// Connect to WebSocket server
-		const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-		const ws = new WebSocket(protocol + '//' + location.host);
-		ws.binaryType = 'arraybuffer'; // Accept binary frames as ArrayBuffer
+		// Load saved credentials from localStorage
+		const savedUsername = localStorage.getItem('ws-username');
+		const savedPassword = localStorage.getItem('ws-password');
+		if (savedUsername) authUsername.value = savedUsername;
+		if (savedPassword) authPassword.value = savedPassword;
+		
+		// Simple reactive data store
+		const store = {};
+		const listeners = {};
 		
 		function addMessage(content, type = 'info') {
 			const msgEl = document.createElement('div');
@@ -147,15 +241,13 @@
 			messagesDiv.appendChild(msgEl);
 			messagesDiv.scrollTop = messagesDiv.scrollHeight;
 		}
-
-		// Simple reactive data store
-		const store = {};
-		const listeners = {};
-
+		
 		// Simple API similar to Gun
 		const data = {
 			put: function(value) {
-				ws.send(JSON.stringify({ type: 'put', key: 'data', value }));
+				if (ws && ws.readyState === WebSocket.OPEN) {
+					ws.send(JSON.stringify({ type: 'put', key: 'data', value }));
+				}
 			},
 			get: function(prop) {
 				return {
@@ -171,27 +263,159 @@
 			}
 		};
 
-		ws.onopen = function() {
-			console.log('Connected to WebSocket server at ' + ws.url);
-			addMessage('Connected to WebSocket server', 'info');
-			console.log('Connected to WebSocket server');
-			// Write a value
-			data.put({ message: 'Hello world!' });
-		};
-
-		ws.onmessage = function(event) {
-			// Handle different data types
-			if (event.data instanceof Blob) {
-				// Binary blob data
-				handleBinaryData(event.data);
-			} else if (event.data instanceof ArrayBuffer) {
-				// Binary array buffer
-				handleBinaryData(new Blob([event.data]));
-			} else if (typeof event.data === 'string') {
-				// Text data
-				processMessage(event.data);
+		// Connect to WebSocket server
+		let ws = null;
+		const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+		
+		function connectWebSocket(username = null, password = null) {
+			let wsUrl = protocol + '//' + location.host;
+			if (username && password) {
+				wsUrl += '?username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password);
 			}
-		};
+			
+			ws = new WebSocket(wsUrl);
+			ws.binaryType = 'arraybuffer'; // Accept binary frames as ArrayBuffer
+			
+			ws.onerror = function(error) {
+				console.error('WebSocket error:', error);
+				addMessage('WebSocket error: ' + error, 'error');
+				// Show auth form if connection fails (might be due to auth)
+				authForm.style.display = 'block';
+			};
+			
+			ws.onopen = function() {
+				console.log('Connected to WebSocket server at ' + ws.url);
+				addMessage('Connected to WebSocket server', 'info');
+				authForm.style.display = 'none';
+				// Save credentials if provided
+				if (username && password) {
+					localStorage.setItem('ws-username', username);
+					localStorage.setItem('ws-password', password);
+				}
+				// Write a value
+				data.put({ message: 'Hello world!' });
+			};
+
+			ws.onmessage = function(event) {
+				// Handle different data types
+				if (event.data instanceof Blob) {
+					// Binary blob data
+					handleBinaryData(event.data);
+				} else if (event.data instanceof ArrayBuffer) {
+					// Binary array buffer
+					handleBinaryData(new Blob([event.data]));
+				} else if (typeof event.data === 'string') {
+					// Text data
+					processMessage(event.data);
+				}
+			};
+
+			ws.onclose = function() {
+				console.log('Disconnected from WebSocket server');
+				addMessage('Disconnected from WebSocket server', 'error');
+			};
+		}
+		
+		// Initial connection attempt
+		connectWebSocket(savedUsername, savedPassword);
+		
+		// Auto-connect with saved credentials on page load
+		if (savedUsername && savedPassword) {
+			// Credentials already saved, will connect automatically via connectWebSocket above
+		}
+		
+		// Auth form submit handler
+		authConnect.addEventListener('click', function() {
+			const username = authUsername.value;
+			const password = authPassword.value;
+			if (!username || !password) {
+				alert('Please enter both username and password');
+				return;
+			}
+			// Close existing connection
+			if (ws) ws.close();
+			// Try connecting with credentials
+			connectWebSocket(username, password);
+		});
+		
+		// Allow Enter key in password field
+		authPassword.addEventListener('keypress', function(e) {
+			if (e.key === 'Enter') authConnect.click();
+		});
+		
+		// Check if auth is required (but connection failed due to auth)
+		// Auto-show form after 2 seconds if not connected
+		setTimeout(function() {
+			if (!ws || ws.readyState !== WebSocket.OPEN) {
+				authForm.style.display = 'block';
+			}
+		}, 2000);
+		
+		function addMessage(content, type = 'info') {
+			const msgEl = document.createElement('div');
+			msgEl.className = 'message ' + type;
+			const timeStr = new Date().toLocaleTimeString();
+			
+			// If content is an HTML element, append it
+			if (content instanceof HTMLElement) {
+				const wrapper = document.createElement('div');
+				wrapper.innerHTML = '<strong>' + timeStr + '</strong><br>';
+				wrapper.appendChild(content);
+				msgEl.appendChild(wrapper);
+			} else {
+				// Text content
+				msgEl.textContent = timeStr + ' - ' + content;
+			}
+			
+			messagesDiv.appendChild(msgEl);
+			messagesDiv.scrollTop = messagesDiv.scrollHeight;
+		}
+
+		function addJSON(obj, type = 'info') {
+			const msgEl = document.createElement('div');
+			msgEl.className = 'message ' + type;
+			const timeStr = new Date().toLocaleTimeString();
+			
+			const wrapper = document.createElement('div');
+			wrapper.innerHTML = '<strong>' + timeStr + ' - JSON:</strong>';
+			
+			const pre = document.createElement('pre');
+			pre.style.backgroundColor = '#f5f5f5';
+			pre.style.padding = '10px';
+			pre.style.borderRadius = '4px';
+			pre.style.overflow = 'auto';
+			pre.style.maxHeight = '400px';
+			pre.textContent = JSON.stringify(obj, null, 2);
+			
+			wrapper.appendChild(pre);
+			msgEl.appendChild(wrapper);
+			messagesDiv.appendChild(msgEl);
+			messagesDiv.scrollTop = messagesDiv.scrollHeight;
+		}
+
+		function addImage(src, type = 'info') {
+			const msgEl = document.createElement('div');
+			msgEl.className = 'message ' + type;
+			const timeStr = new Date().toLocaleTimeString();
+			
+			const wrapper = document.createElement('div');
+			wrapper.innerHTML = '<strong>' + timeStr + ' - Image:</strong><br>';
+			
+			const img = document.createElement('img');
+			img.src = src;
+			img.style.maxWidth = '100%';
+			img.style.maxHeight = '400px';
+			img.style.marginTop = '10px';
+			img.onerror = function() {
+				this.style.display = 'none';
+				wrapper.innerHTML += '<em>Failed to load image</em>';
+			};
+			
+			wrapper.appendChild(img);
+			msgEl.appendChild(wrapper);
+			messagesDiv.appendChild(msgEl);
+			messagesDiv.scrollTop = messagesDiv.scrollHeight;
+		}
 
 		// Video stream tracking
 		let frameCount = 0;
@@ -266,6 +490,8 @@
 		// Fullscreen handler
 		document.getElementById('fullscreenBtn').addEventListener('click', function() {
 			const videoStream = document.getElementById('videoStream');
+			
+			// Try browser fullscreen first
 			if (videoStream.requestFullscreen) {
 				videoStream.requestFullscreen();
 			} else if (videoStream.webkitRequestFullscreen) {
@@ -275,6 +501,9 @@
 			} else if (videoStream.msRequestFullscreen) {
 				videoStream.msRequestFullscreen();
 			}
+			
+			// Fallback: Also add hash-based fullscreen
+			window.location.hash = 'fullscreen';
 		});
 
 		// Picture-in-Picture handler
@@ -290,6 +519,36 @@
 				}
 			} else {
 				alert('Picture-in-Picture is not supported in your browser');
+			}
+		});
+
+		// Exit fullscreen handler
+		document.addEventListener('fullscreenchange', function() {
+			if (!document.fullscreenElement) {
+				window.location.hash = '';
+			}
+		});
+
+		// Click video to toggle fullscreen
+		document.getElementById('videoStream').addEventListener('click', function() {
+			if (document.body.className === 'fullscreen') {
+				window.location.hash = '';
+				// Also exit browser fullscreen if active
+				if (document.fullscreenElement) {
+					document.exitFullscreen();
+				}
+			} else {
+				document.getElementById('fullscreenBtn').click();
+			}
+		});
+
+		// Escape key to exit fullscreen
+		document.addEventListener('keydown', function(e) {
+			if (e.key === 'Escape' && document.body.className === 'fullscreen') {
+				window.location.hash = '';
+				if (document.fullscreenElement) {
+					document.exitFullscreen();
+				}
 			}
 		});
 
@@ -354,20 +613,6 @@
 				console.log('Not JSON, displaying as raw text or image');
 			}
 		}
-
-		ws.onerror = function(err) {
-			addMessage('WebSocket error: ' + err, 'error');
-			document.getElementById('streamStatus').textContent = '🔴 WebSocket error';
-			document.getElementById('streamStatus').style.color = '#c62828';
-			console.error('WebSocket error:', err);
-		};
-
-		ws.onclose = function() {
-			addMessage('Disconnected from WebSocket server', 'error');
-			document.getElementById('streamStatus').textContent = '🔴 Disconnected';
-			document.getElementById('streamStatus').style.color = '#c62828';
-			console.log('Disconnected from WebSocket server');
-		};
 
 		// Expose for console access
 		window.data = data;

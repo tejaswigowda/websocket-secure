@@ -4,11 +4,11 @@ const http = require('http');
 const { app, setupWebSocket } = require('./app.js');
 
 // Parse command-line arguments
-const PORT = process.argv[2] || process.env.PORT || 3000;
+const PORT = process.argv[2] || process.env.PORT || 8080;
 
 const server = http.createServer(app);
 
-// Setup WebSocket server with 2 endpoints: /server and /client
+// Setup WebSocket server with 2 endpoints: /server and /
 setupWebSocket(server);
 
 server.listen(PORT, () => {
@@ -17,5 +17,5 @@ server.listen(PORT, () => {
   console.log("  ws://localhost:" + PORT + "/ - for web browsers (also at http://localhost:" + PORT + "/)");
   console.log("");
   console.log("Usage: node server.js [PORT]");
-  console.log("  PORT - Server port (default: 3000)");
+  console.log("  PORT - Server port (default: 8080)");
 });

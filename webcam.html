@@ -88,6 +88,15 @@
 <body>
 	<h1>🎥 Webcam JPEG Streamer</h1>
 	
+	<div id="authForm" style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; border-radius: 4px; display: none;">
+		<h3>WebSocket Authentication</h3>
+		<div style="margin: 10px 0;">
+			<input type="text" id="authUsername" placeholder="Username" style="padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;">
+			<input type="password" id="authPassword" placeholder="Password" style="padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px;">
+			<button id="authConnect" style="background-color: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Connect</button>
+		</div>
+	</div>
+	
 	<div class="container">
 		<div class="section">
 			<h2>Webcam</h2>
@@ -137,6 +146,12 @@
 	let byteCount = 0;
 	let streamInterval = null;
 	
+	// Load saved credentials from localStorage
+	const savedUsername = localStorage.getItem('ws-username');
+	const savedPassword = localStorage.getItem('ws-password');
+	if (savedUsername) authUsername.value = savedUsername;
+	if (savedPassword) authPassword.value = savedPassword;
+	
 	// Load saved FPS from localStorage
 	const savedFPS = localStorage.getItem('webcam-fps');
 	if (savedFPS) {
@@ -152,22 +167,34 @@
 	});
 	
 	// Connect to WebSocket
-	function connectWebSocket() {
+	function connectWebSocket(username = null, password = null) {
 		const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-		ws = new WebSocket(protocol + '//' + location.host + '/server');
+		let wsUrl = protocol + '//' + location.host + '/server';
+		if (username && password) {
+			wsUrl += '?username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password);
+		}
 		
+		ws = new WebSocket(wsUrl);
 		ws.binaryType = 'arraybuffer';
 		
 		ws.onopen = function() {
 			console.log('Connected to WebSocket server');
 			updateStatus('connected', 'Connected to server');
 			document.getElementById('connectionStatus').textContent = 'Connected';
+			authForm.style.display = 'none';
+			// Save credentials if provided
+			if (username && password) {
+				localStorage.setItem('ws-username', username);
+				localStorage.setItem('ws-password', password);
+			}
 		};
 		
 		ws.onerror = function(err) {
 			console.error('WebSocket error:', err);
 			updateStatus('disconnected', 'WebSocket error');
 			document.getElementById('connectionStatus').textContent = 'Error';
+			// Show auth form if connection fails
+			authForm.style.display = 'block';
 		};
 		
 		ws.onclose = function() {
@@ -178,6 +205,25 @@
 			stopStreamButton.disabled = true;
 		};
 	}
+	
+	// Auth form submit handler
+	authConnect.addEventListener('click', function() {
+		const username = authUsername.value;
+		const password = authPassword.value;
+		if (!username || !password) {
+			alert('Please enter both username and password');
+			return;
+		}
+		// Close existing connection
+		if (ws) ws.close();
+		// Try connecting with credentials
+		connectWebSocket(username, password);
+	});
+	
+	// Allow Enter key in password field
+	authPassword.addEventListener('keypress', function(e) {
+		if (e.key === 'Enter') authConnect.click();
+	});
 	
 	function updateStatus(className, text) {
 		statusDiv.className = className;
@@ -196,7 +242,7 @@
 			startStreamButton.disabled = false;
 			document.getElementById('fullscreenBtn').disabled = false;
 			document.getElementById('pipBtn').disabled = false;
-			connectWebSocket();
+			connectWebSocket(savedUsername, savedPassword);
 			updateStatus('connected', 'Camera started');
 		} catch (err) {
 			console.error('Error accessing camera:', err);
