@@ -177,6 +177,11 @@
 			connectionStatusDiv.innerHTML = '<strong style="color: #388e3c;">Connected - Ready to Stream</strong>';
 		};
 		
+		ws.onmessage = function(event) {
+			// Handle incoming messages from server
+			console.log('Received message:', event.data);
+		};
+		
 		ws.onerror = function(err) {
 			console.error('WebSocket error:', err);
 			updateStatus('disconnected', 'WebSocket error');

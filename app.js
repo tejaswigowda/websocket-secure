@@ -50,11 +50,16 @@ function generateAuthToken() {
 // Check if token is valid
 function isTokenValid(token) {
   const data = authTokens.get(token);
-  if (!data) return false;
+  if (!data) {
+    console.log('[Auth] Token not found in store:', token.substring(0, 16) + '...');
+    return false;
+  }
   if (data.expiry < Date.now()) {
+    console.log('[Auth] Token expired');
     authTokens.delete(token);
     return false;
   }
+  console.log('[Auth] Token is valid');
   return true;
 }
 
@@ -92,8 +97,14 @@ function setupWebSocket(server, auth = {}) {
     // Check for valid temporary token first (preferred method)
     const parsedUrl = url.parse(request.url, true);
     const token = parsedUrl.query.token;
-    if (token && isTokenValid(token)) {
-      return true; // Token is valid
+    console.log('[Auth] Connection attempt - URL:', request.url.substring(0, 80));
+    console.log('[Auth] Token present:', !!token);
+    
+    if (token) {
+      console.log('[Auth] Token provided:', token.substring(0, 16) + '...');
+      if (isTokenValid(token)) {
+        return true; // Token is valid
+      }
     }
     
     // Check Authorization header (Basic auth)
@@ -103,6 +114,7 @@ function setupWebSocket(server, auth = {}) {
         const credentials = Buffer.from(authHeader.substring(6), 'base64').toString('utf-8');
         const [username, password] = credentials.split(':');
         if (username === auth.username && password === auth.password) {
+          console.log('[Auth] Basic auth accepted');
           return true;
         }
       } catch (e) {
@@ -113,7 +125,13 @@ function setupWebSocket(server, auth = {}) {
     // Check URL query parameters (fallback for username/password)
     const username = parsedUrl.query.username;
     const password = parsedUrl.query.password;
-    return username === auth.username && password === auth.password;
+    if (username === auth.username && password === auth.password) {
+      console.log('[Auth] Query params auth accepted');
+      return true;
+    }
+    
+    console.log('[Auth] Auth failed - no valid credentials');
+    return false;
   }
 
   const clients1 = new Set(); // server endpoint clients
