@@ -11,6 +11,12 @@ const path = require('path');
 // Parse command line arguments
 function parseArgs() {
   const args = process.argv.slice(2);
+  
+  // Check for help flag early
+  if (args.includes('--help') || args.includes('-h')) {
+    return { help: true };
+  }
+
   const parsed = {
     mode: 'http',
     port: 3000,
@@ -20,7 +26,7 @@ function parseArgs() {
     httpsPort: 8443,
     username: null,
     password: null,
-    production: true,
+    production: process.env.NODE_ENV === 'production',
     staging: false,
     help: false,
   };
@@ -30,10 +36,6 @@ function parseArgs() {
     const next = args[i + 1];
 
     switch (arg) {
-      case '--help':
-      case '-h':
-        parsed.help = true;
-        break;
       case '--mode':
         parsed.mode = next;
         i++;
@@ -91,7 +93,7 @@ function parseArgs() {
   }
 
   // If production mode, enforce HTTPS
-  if (process.env.NODE_ENV === 'production' || parsed.production === true) {
+  if (parsed.production === true) {
     if (!parsed.email || !parsed.domain) {
       console.error('\n❌ Error: Production mode requires --email and --domain for HTTPS\n');
       showHelp();
