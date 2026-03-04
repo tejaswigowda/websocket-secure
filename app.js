@@ -148,6 +148,11 @@ function setupWebSocket(server, auth = {}) {
     console.log('[Server] Client connected. Total:', clients1.size);
 
     ws.on('message', (message) => {
+      // Skip processing if no clients are connected
+      if (clients1.size === 0 && clients2.size === 0) {
+        return; // No clients listening, skip processing
+      }
+
       // Check if message is binary data (Buffer or ArrayBuffer)
       const isBinary = Buffer.isBuffer(message) || message instanceof ArrayBuffer;
       const dataType = Buffer.isBuffer(message) ? 'Buffer' : typeof message;
@@ -226,24 +231,28 @@ function setupWebSocket(server, auth = {}) {
           Object.assign(store[key], value);
           saveData();
 
-          // Broadcast to all clients on /client endpoint
-          const broadcast = JSON.stringify({ type: 'update', key, value: store[key] });
-          clients2.forEach((client) => {
-            if (client.readyState === 1) {
-              client.send(broadcast);
-            }
-          });
+          // Only broadcast if there are clients listening
+          if (clients2.size > 0) {
+            const broadcast = JSON.stringify({ type: 'update', key, value: store[key] });
+            clients2.forEach((client) => {
+              if (client.readyState === 1) {
+                client.send(broadcast);
+              }
+            });
+          }
         } else if (msg.type === 'get') {
           // Send requested data
           const { key } = msg;
           ws.send(JSON.stringify({ type: 'update', key, value: store[key] || null }));
         } else {
-          // Broadcast any other JSON message
-          clients2.forEach((client) => {
-            if (client.readyState === 1) {
-              client.send(message);
-            }
-          });
+          // Broadcast any other JSON message (only if there are clients)
+          if (clients2.size > 0) {
+            clients2.forEach((client) => {
+              if (client.readyState === 1) {
+                client.send(message);
+              }
+            });
+          }
         }
       } catch (e) {
         console.error('[Client] Error processing message:', e);
