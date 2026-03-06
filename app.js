@@ -104,6 +104,7 @@ function setupWebSocket(server, auth = {}) {
     const token = parsedUrl.query.token;
     console.log('[Auth] Connection attempt - URL:', request.url.substring(0, 80));
     console.log('[Auth] Token present:', !!token);
+    console.log('[Auth] Headers:', JSON.stringify(request.headers, null, 2).substring(0, 200));
     
     if (token) {
       console.log('[Auth] Token provided:', token.substring(0, 16) + '...');
@@ -114,15 +115,21 @@ function setupWebSocket(server, auth = {}) {
     
     // Check Authorization header (Basic auth)
     const authHeader = request.headers.authorization || '';
+    console.log('[Auth] Authorization header:', authHeader ? authHeader.substring(0, 30) : '(none)');
+    
     if (authHeader.startsWith('Basic ')) {
       try {
         const credentials = Buffer.from(authHeader.substring(6), 'base64').toString('utf-8');
         const [username, password] = credentials.split(':');
+        console.log('[Auth] Basic auth - username:', username);
         if (username === auth.username && password === auth.password) {
           console.log('[Auth] Basic auth accepted');
           return true;
+        } else {
+          console.log('[Auth] Basic auth failed - credentials mismatch');
         }
       } catch (e) {
+        console.log('[Auth] Basic auth decode error:', e.message);
         // Fall through to check URL params
       }
     }
@@ -130,12 +137,18 @@ function setupWebSocket(server, auth = {}) {
     // Check URL query parameters (fallback for username/password)
     const username = parsedUrl.query.username;
     const password = parsedUrl.query.password;
-    if (username === auth.username && password === auth.password) {
-      console.log('[Auth] Query params auth accepted');
-      return true;
+    if (username && password) {
+      console.log('[Auth] Query params provided - checking...');
+      if (username === auth.username && password === auth.password) {
+        console.log('[Auth] Query params auth accepted');
+        return true;
+      } else {
+        console.log('[Auth] Query params auth failed - credentials mismatch');
+      }
     }
     
     console.log('[Auth] Auth failed - no valid credentials');
+    console.log('[Auth] Expected username:', auth.username, ', password length:', auth.password ? auth.password.length : 0);
     return false;
   }
 
